@@ -1,0 +1,261 @@
+
+    <!DOCTYPE html>
+    <meta charset="utf-8">
+    <style>
+h1 {
+  text-align: left;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 50px;
+}
+
+h2 {
+  text-align: left;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 30px;
+}
+
+p {
+  text-align: left;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+}
+
+body {
+    margin: 0 auto;
+    max-width: 760px;
+}
+
+path {
+    stroke: steelblue;
+    stroke-width: 2;
+    fill: none;
+}
+.axis path,
+.axis line {
+    fill: none;
+    stroke: grey;
+    stroke-width: 1;
+    shape-rendering: crispEdges;
+}
+
+div.tooltip {
+    position: absolute;
+    text-align: left;
+    width: 230px;
+    padding: 10px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #222;
+
+    font-size: 14px;
+    background: white;
+    border: 2px;
+    border-radius: 8px;
+    border-style: solid;
+  border-color: #000;
+
+}
+text {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    fill: #666;
+  font-size: 14px;
+
+}
+  </style>
+
+  <body>
+
+  <script src="https://d3js.org/d3.v3.min.js"></script>
+  <script src="http://momentjs.com/downloads/moment.min.js"></script>
+
+  <script>
+  
+function createGraph (json) {
+  function sigfigs (x) {
+    var xr = Math.round(x * 1000)
+    return (xr / 1000)
+  }
+  console.log("josn; ", json)
+
+  // Setup margins.
+  var margin = {top: 30, right: 20, bottom: 30, left: 50}
+  var width = 660 - margin.left - margin.right
+  var height = 297 - margin.top - margin.bottom
+
+  var x = d3.time.scale().range([0, width])
+  var y = d3.scale.linear().range([height, 0])
+
+  var xAxis = d3.svg.axis().scale(x)
+      .orient('bottom').ticks(5)
+  var yAxis = d3.svg.axis().scale(y)
+      .orient('left').ticks(5)
+
+  var valueline = d3.svg.line()
+      .x(function (d) { return x(d.date) })
+      .y(function (d) { return y(d.testData.time.mean) })
+
+  // Define the div for the tooltip
+  var div = d3.select('body').append('div')
+      .attr('class', 'tooltip')
+      .style('opacity', 0) // initially, the div is invisible.
+
+
+  // create header.
+  var header = document.createElement('h1')
+  header.innerHTML = "Benchmark Results"
+  document.body.appendChild(header)
+
+  header = document.createElement('h2')
+  header.innerHTML = 'Device Info</br> '
+  document.body.appendChild(header)
+
+  par = document.createElement('p')
+  par.innerHTML =
+    '<b>CPU: </b>' + json.deviceInfo.cpu + '</br>' +
+    '<b>OS: </b>' + json.deviceInfo.platform + ' ' +
+    json.deviceInfo.release + ' ' +
+    json.deviceInfo.arch
+    '</br>' +
+
+  document.body.appendChild(par)
+
+  Object.keys(json.testResults[0].testData).map(function (testCase) {
+    /*if (testCase !== 'cube') {
+      return
+    }*/
+    console.log("test case: ", testCase)
+
+    // create header.
+    var header = document.createElement('h2')
+    header.innerHTML = 'Test Case: ' + testCase
+    document.body.appendChild(header)
+
+    // gather test data for this test case.
+    var data = []
+    for (var i = 0; i < json.testResults.length; i++) {
+      data.push({
+        date: new Date(json.testResults[i].timestamp * 1000),
+        title: json.testResults[i].title,
+        description: json.testResults[i].description,
+        hash: json.testResults[i].hash,
+        author: json.testResults[i].author,
+
+        testData: json.testResults[i].testData[testCase]
+      })
+    }
+
+    // add svg canvas.
+    var svg = d3.select('body')
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform',
+              'translate(' + margin.left + ',' + margin.top + ')')
+
+    x.domain(d3.extent(data, function (d) { return d.date }))
+    y.domain([0, d3.max(data, function (d) { return d.testData.time.mean })])
+
+    // draw line chart.
+    svg.append('path')
+      .attr('class', 'line')
+      .attr('d', valueline(data))
+
+    // draw data point dots.
+    svg.selectAll('dot')
+      .data(data)
+      .enter()
+      .append('a')
+      .attr('xlink:href',
+            function (d) {
+              return 'https://github.com/mikolalysenko/regl/commit/' + d.hash
+            })
+      .attr('target', '"_blank"')
+      .append('circle')
+
+      .attr('r', 3)
+      .attr('cx', function (d) { return x(d.date) })
+      .attr('cy', function (d) { return y(d.testData.time.mean) })
+
+    // show tooltip on hover.
+      .on('mouseover', function (d) {
+        div
+          .transition()
+          .duration(100)
+          .style('opacity', 0.9)
+
+        var desc = d.title + d.description
+        var shortenedDesc = desc.length > 70 ? desc.substring(0, 69) + '...' : desc
+        var commitUrl = 'https://github.com/mikolalysenko/regl/commit/' + d.hash
+
+        var timeDiff = moment(d.date).fromNow()
+
+        console.log('link: ', commitUrl)
+
+        div.html(
+          '<table>' +
+            '<tbody>' +
+
+          '<tr>' +
+            '<td><b>Hash: </b></td>  <td>' + '<code>' + d.hash.substring(0, 7) + '</code>' + '</td>' +
+            '</tr>' +
+
+          '<tr>' +
+            '<td><b>Desc.: </b></td>  <td>' + shortenedDesc + '</td>' +
+            '</tr>' +
+
+          '<tr>' +
+            '<td><b>Time: </b></td>  <td>' + sigfigs(d.testData.time.mean) + '∓' + sigfigs(d.testData.time.stddev) + 'ms' + '</td>' +
+            '</tr>' +
+
+          '<tr>' +
+            '<td><b>Author: </b></td>  <td>' + d.author + '</td>' +
+            '</tr>' +
+
+          '<tr>' +
+            '<td><b>Date: </b></td>  <td>' + timeDiff + '</td>' +
+            '</tr>' +
+
+          '</tbody>' +
+            '</table>'
+        )
+          .style('left', (d3.event.pageX + 10) + 'px')
+          .style('top', (d3.event.pageY - 28) + 'px')
+      }).on('mouseout',
+            function (d) {
+              div.transition()
+                .duration(100)
+                .style('opacity', 0)
+            })
+
+    // X-axis
+    svg.append('g')
+      .attr('class', 'x axis')
+      .attr('transform', 'translate(0,' + height + ')')
+      .call(xAxis)
+      .append('text')
+      .attr('class', 'label')
+      .attr('x', width + 20)
+      .attr('y', -6)
+      .style('text-anchor', 'end')
+      .text('Commit Time')
+
+    // Y-axis
+    svg.append('g')
+      .attr('class', 'y axis')
+      .call(yAxis)
+      .append('text')
+      .attr('class', 'label')
+      .attr('y', -20)
+      .attr('x', 40)
+      .attr('dy', '.7em')
+      .style('text-anchor', 'end')
+      .text('Runtime(ms)')
+  })
+}
+
+
+createGraph({"testResults":[{"hash":"ae0477882c1a448a361b99a4b147bc42b1a73abd","author":"Eric Arnebäck","timestamp":1468753245,"title":"commit8.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.017204648310442765,"stddev":0.16551330815953824}},"cube":{"n":30000,"time":{"mean":0.06892684213841954,"stddev":0.21182060487547902}},"cube-webgl":{"n":30000,"time":{"mean":0.024539519582192103,"stddev":0.0785090721988863}},"buffer":{"n":30000,"time":{"mean":0.008679036070406437,"stddev":0.03717950885030278}},"draw-static":{"n":30000,"time":{"mean":0.06806697253733873,"stddev":0.015309442981716801}},"draw-dynamic":{"n":30000,"time":{"mean":0.0674700452486674,"stddev":0.010991472341286406}},"draw-batch":{"n":30000,"time":{"mean":0.04050632274970412,"stddev":0.020387798898885416}}}},{"hash":"2abdd0c8a640958b8fcf45544bcd776fbf928378","author":"Eric Arnebäck","timestamp":1468753224,"title":"commit7.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.015102330222974221,"stddev":0.1347858492831326}},"cube":{"n":30000,"time":{"mean":0.050591538258393604,"stddev":0.05328854993931175}},"cube-webgl":{"n":30000,"time":{"mean":0.026722515462338923,"stddev":0.07540425610408881}},"buffer":{"n":30000,"time":{"mean":0.00848951635286212,"stddev":0.02755898917017031}},"draw-static":{"n":30000,"time":{"mean":0.05190311514784893,"stddev":0.07482005908187844}},"draw-dynamic":{"n":30000,"time":{"mean":0.049424588458736735,"stddev":0.012546968603813163}},"draw-batch":{"n":30000,"time":{"mean":0.04155441642875473,"stddev":0.02167465522293346}}}},{"hash":"57b0d881b6a24632fbbfd3edfb568368066927ae","author":"Eric Arnebäck","timestamp":1468753214,"title":"commit6.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.015200882456700007,"stddev":0.13757302533798133}},"cube":{"n":30000,"time":{"mean":0.03974737975721558,"stddev":0.08448848917027806}},"cube-webgl":{"n":30000,"time":{"mean":0.03370366387839119,"stddev":0.1062498100851173}},"buffer":{"n":30000,"time":{"mean":0.008461071612437567,"stddev":0.030202660040753167}},"draw-static":{"n":30000,"time":{"mean":0.029425145567953587,"stddev":0.021360777587056616}},"draw-dynamic":{"n":30000,"time":{"mean":0.02995112982466817,"stddev":0.015568672149673494}},"draw-batch":{"n":30000,"time":{"mean":0.0461887348935008,"stddev":0.027009585257856263}}}},{"hash":"340a9d64e1dae5862a09288416789bb193da2fd6","author":"Eric Arnebäck","timestamp":1468753189,"title":"commit5.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.01668144339596232,"stddev":0.15762383536465494}},"cube":{"n":30000,"time":{"mean":0.03139929704740643,"stddev":0.05208921063745125}},"cube-webgl":{"n":30000,"time":{"mean":0.027570073160529136,"stddev":0.08508843911265289}},"buffer":{"n":30000,"time":{"mean":0.008365028672665357,"stddev":0.03576926376743157}},"draw-static":{"n":30000,"time":{"mean":0.02019771477927764,"stddev":0.018710515528452373}},"draw-dynamic":{"n":30000,"time":{"mean":0.023702865076313417,"stddev":0.02994544961753398}},"draw-batch":{"n":30000,"time":{"mean":0.04500760834018389,"stddev":0.08363749425004735}}}},{"hash":"f7e40ad12801ccb4fb9d1b56db09dd4731f812ee","author":"Eric Arnebäck","timestamp":1468753080,"title":"commit4.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.01557182047739625,"stddev":0.13409897515184177}},"cube":{"n":30000,"time":{"mean":0.020603603691607714,"stddev":0.059360790859981756}},"cube-webgl":{"n":30000,"time":{"mean":0.029637659304092328,"stddev":0.08686571372213722}},"buffer":{"n":30000,"time":{"mean":0.008865107660243909,"stddev":0.0249674759335284}},"draw-static":{"n":30000,"time":{"mean":0.015733869557827712,"stddev":0.0946706904754049}},"draw-dynamic":{"n":30000,"time":{"mean":0.013358192838480075,"stddev":0.06930063234934247}},"draw-batch":{"n":30000,"time":{"mean":0.0418797568274041,"stddev":0.021125928929071083}}}},{"hash":"4a56090b4285737eaacba2477d1fa2c3569178ce","author":"Eric Arnebäck","timestamp":1468753045,"title":"commit3.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.015703634525338808,"stddev":0.14030228195018304}},"cube":{"n":30000,"time":{"mean":0.018322521564612785,"stddev":0.04108020645093514}},"cube-webgl":{"n":30000,"time":{"mean":0.026254202820857366,"stddev":0.07401981107829951}},"buffer":{"n":30000,"time":{"mean":0.00866572966898481,"stddev":0.024883285063602368}},"draw-static":{"n":30000,"time":{"mean":0.015740921948601803,"stddev":0.09639000546215565}},"draw-dynamic":{"n":30000,"time":{"mean":0.013483061494181554,"stddev":0.06568947284896588}},"draw-batch":{"n":30000,"time":{"mean":0.041720570639769236,"stddev":0.021547456472514468}}}},{"hash":"2d51894dd414a888608525d07b95be76dcf455bb","author":"Eric Arnebäck","timestamp":1468753031,"title":"commit2.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.015498923726628224,"stddev":0.13783547328003495}},"cube":{"n":30000,"time":{"mean":0.017373550241192182,"stddev":0.04009799485044953}},"cube-webgl":{"n":30000,"time":{"mean":0.02613176150719325,"stddev":0.08512648148283898}},"buffer":{"n":30000,"time":{"mean":0.008296558577318987,"stddev":0.03696294030507753}},"draw-static":{"n":30000,"time":{"mean":0.015803983073184886,"stddev":0.09698546561624037}},"draw-dynamic":{"n":30000,"time":{"mean":0.013401737165451049,"stddev":0.06194923830918513}},"draw-batch":{"n":30000,"time":{"mean":0.042464240976423026,"stddev":0.021036394038324795}}}},{"hash":"f830f7e7114b9d598490b4ef2578a2c75c718cef","author":"Eric Arnebäck","timestamp":1468752993,"title":"commit1.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.015578041732559602,"stddev":0.1386929537477911}},"cube":{"n":30000,"time":{"mean":0.017380026030540466,"stddev":0.038337623394901085}},"cube-webgl":{"n":30000,"time":{"mean":0.02648117456858357,"stddev":0.0745179514382716}},"buffer":{"n":30000,"time":{"mean":0.00814880923256278,"stddev":0.024887624334561063}},"draw-static":{"n":30000,"time":{"mean":0.01574286825830738,"stddev":0.0969182204584943}},"draw-dynamic":{"n":30000,"time":{"mean":0.013305891218533119,"stddev":0.06508874186231525}},"draw-batch":{"n":30000,"time":{"mean":0.04242155681649844,"stddev":0.021362430433814923}}}},{"hash":"a04bda47d6f3e748725a8fc82fa8be839a532eb9","author":"Eric Arnebäck","timestamp":1468751255,"title":"Now `bench-history.js` can't collect benchmark info beyond the","description":"\nNow `bench-history.js` can take command line arguments.\n","testData":{"clear":{"n":30000,"time":{"mean":0.015759641157587368,"stddev":0.1410287981579059}},"cube":{"n":30000,"time":{"mean":0.018537144357711078,"stddev":0.04800908572614386}},"cube-webgl":{"n":30000,"time":{"mean":0.02733455196544528,"stddev":0.06938348357800761}},"buffer":{"n":30000,"time":{"mean":0.008003055383016665,"stddev":0.024537096417617636}},"draw-static":{"n":30000,"time":{"mean":0.015748452724268037,"stddev":0.09374727241487256}},"draw-dynamic":{"n":30000,"time":{"mean":0.01350266713500023,"stddev":0.06325512624096168}},"draw-batch":{"n":30000,"time":{"mean":0.04263817042907079,"stddev":0.022225620654578802}}}},{"hash":"e1799c0055b07f3722f8635c2a9bf7759e9d11e8","author":"Eric Arnebäck","timestamp":1468748133,"title":"Fixed `bench-browser`. So the benchmarks run in the browser again.","description":"","testData":{"clear":{"n":30000,"time":{"mean":0.015608293513953686,"stddev":0.1393671661979711}},"cube":{"n":30000,"time":{"mean":0.017800001258403062,"stddev":0.041968633348840274}},"cube-webgl":{"n":30000,"time":{"mean":0.025333226802200078,"stddev":0.0765623396627684}},"buffer":{"n":30000,"time":{"mean":0.00828717211857438,"stddev":0.02558238315266242}},"draw-static":{"n":30000,"time":{"mean":0.016159679206212363,"stddev":0.09993133041007124}},"draw-dynamic":{"n":30000,"time":{"mean":0.01320383339598775,"stddev":0.06095443643392342}},"draw-batch":{"n":30000,"time":{"mean":0.04463643624310692,"stddev":0.02150580506447366}}}}],"deviceInfo":{"cpu":"Intel(R) Core(TM) i5-4278U CPU @ 2.60GHz","platform":"darwin","release":"14.3.0","arch":"x64"}})
+  </script>
+
+  </body>
+    
